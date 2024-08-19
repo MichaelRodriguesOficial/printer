@@ -56,10 +56,6 @@ Aqui estão algumas capturas de tela do aplicativo em ação:
 
 ![Imprimindo](https://github.com/MichaelRodriguesOficial/printer/blob/main/imagens/Imprimindo.png?raw=true)
 
-## Contribuições
-
-Contribuições são bem-vindas! Se você encontrar algum problema ou tiver alguma sugestão, sinta-se à vontade para abrir uma issue ou enviar um pull request.
-
 ## Transformando o código em .exe com o PyInstaller
 
      ```bash
@@ -68,7 +64,11 @@ Contribuições são bem-vindas! Se você encontrar algum problema ou tiver algu
      ```bash
      pyinstaller --noconfirm --onefile --windowed --icon "C:\Github\Printer\img\favicon.ico" --add-data "C:\Github\Printer\img\sol.png;images" --add-data "C:\Github\Printer\img\lua.png;images" --hidden-import pkg_resources --hidden-import pkg_resources.extern "C:/Github/Printer/frontend.py"
      ```
-     
+
+## Contribuições
+
+Contribuições são bem-vindas! Se você encontrar algum problema ou tiver alguma sugestão, sinta-se à vontade para abrir uma issue ou enviar um pull request.
+
 ## Licença
 
 Este projeto é licenciado sob a [MIT License](LICENSE).
