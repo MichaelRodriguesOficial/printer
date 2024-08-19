@@ -45,11 +45,16 @@ Aqui estão algumas capturas de tela do aplicativo em ação:
 
 ### Tela Principal
 
-![Tela Principal](screenshots/main_screen.png)
+![Tela Principal Claro](https://github.com/MichaelRodriguesOficial/printer/blob/main/imagens/Claro.png?raw=true)
+![Tela Principal Escuro](https://github.com/MichaelRodriguesOficial/printer/blob/main/imagens/Escuro.png?raw=true)
 
-### Impressão de Arquivo
+### Avisos
 
-![Impressão de Arquivo](screenshots/print_file.png)
+![Avisos](https://github.com/MichaelRodriguesOficial/printer/blob/main/imagens/Avisos.png?raw=true)
+
+### Imprimindo
+
+![Imprimindo](https://github.com/MichaelRodriguesOficial/printer/blob/main/imagens/Imprimindo.png?raw=true)
 
 ## Contribuições
 
