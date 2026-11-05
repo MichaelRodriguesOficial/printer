@@ -1,0 +1,26 @@
+[project]
+name = "printer-cav"
+version = "2.0.0"
+description = "App de Impressão CAV SUL — impressão em lote de arquivos, pastas e compactados no Windows"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Michael Rodrigues" }]
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "BLE", "UP", "SIM", "N", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # textos em português usam "–", "×", "º" etc.
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["N802", "B017"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: testes mais lentos (conversão real com LibreOffice)",
+    "windows: impressão real no Windows (requer impressora de teste)",
+]
