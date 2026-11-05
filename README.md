@@ -1,79 +1,102 @@
-# App de Impressão CAV SUL
+# Impressão CAV SUL
 
-Este é um aplicativo de interface gráfica (GUI) desenvolvido em Python que permite aos usuários selecionar e imprimir arquivos de diferentes formatos (como .docx, .xlsx, .pdf, .png, entre outros) em uma impressora escolhida. O aplicativo também suporta a extração de arquivos compactados (.zip, .rar) e a impressão dos arquivos contidos neles.
+[![CI](https://github.com/MichaelRodriguesOficial/printer/actions/workflows/ci.yml/badge.svg)](https://github.com/MichaelRodriguesOficial/printer/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Windows](https://img.shields.io/badge/plataforma-Windows%2010%20%7C%2011-0078D6)
+[![Licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-green)](LICENSE)
+
+Aplicativo para Windows que imprime **em lote** arquivos, pastas inteiras e compactados (.zip, .rar, .7z)
+na impressora escolhida. Você monta a fila, confere o que vai sair e acompanha o status de cada arquivo.
+
+![Fila de impressão em andamento](docs/screenshots/imprimindo-claro.png)
 
 ## Funcionalidades
 
-- **Seleção de Arquivo**: O usuário pode selecionar um único arquivo para impressão.
-- **Seleção de Pasta**: O usuário pode selecionar uma pasta, e todos os arquivos suportados dentro dela serão impressos.
-- **Suporte a Arquivos Compactados**: O aplicativo pode extrair e imprimir arquivos dentro de arquivos .zip e .rar.
-- **Configurações de Impressora**: O usuário pode escolher a impressora desejada e acessar as configurações da impressora.
-- **Temas**: O aplicativo oferece suporte a temas claro e escuro.
+- **Arrastar e soltar** arquivos, pastas e compactados, ou usar os botões *Arquivos…* e *Pasta…*.
+- **Fila de impressão** com status por arquivo (*Na fila*, *Imprimindo*, *Impresso*, *Erro*,
+  *Ignorado*) e número de páginas. Dois cliques abrem o arquivo para conferir o conteúdo.
+- **Compactados** extraídos automaticamente, inclusive com subpastas e zips dentro de zips.
+- **Cópias**, **cancelamento** e **reimpressão só do que deu erro**.
+- **Impressora padrão do Windows** já selecionada, **status da impressora** (offline, sem papel,
+  porta aberta…) e acesso às **preferências** (frente e verso, cor, bandeja).
+- Tema **claro, escuro ou do sistema**. O app lembra a última impressora, as cópias e o tema.
+- **Log** para o suporte de TI, aberto pelo link *Abrir logs*.
 
-## Tecnologias Utilizadas
+| Tipo | Extensões | Como imprime |
+|---|---|---|
+| PDF | `.pdf` | PDFium (motor do Chrome), direto na impressora; não depende do leitor de PDF instalado |
+| Imagens | `.png .jpg .jpeg .jfif .bmp .gif .tif .tiff .webp` | Direto na impressora, ajustada à página, com rotação automática e fundo branco em transparências |
+| Word | `.doc .docx .docm .rtf .odt .txt` | Microsoft Word (oculto, com macros desabilitadas); sem Office, pelo LibreOffice |
+| Excel | `.xls .xlsx .xlsm .xlsb .csv .ods` | Microsoft Excel (oculto, com macros desabilitadas); sem Office, pelo LibreOffice |
+| Compactados | `.zip .rar .7z .tar .tgz` | Extraídos e com o conteúdo adicionado à fila (`.rar`/`.7z` exigem o [7-Zip](https://7-zip.org)) |
 
-- **Python 3.x**
-- **Tkinter**: Biblioteca padrão do Python para criação de GUIs.
-- **PIL (Pillow)**: Utilizado para manipulação de imagens.
-- **patoolib**: Utilizado para extração de arquivos compactados.
-- **win32print**: Utilizado para gerenciar impressoras no ambiente Windows.
+<p>
+  <img src="docs/screenshots/vazio-claro.png" width="49%" alt="Tela inicial, tema claro">
+  <img src="docs/screenshots/concluido-escuro.png" width="49%" alt="Lote concluído, tema escuro">
+</p>
 
-## Estrutura do Projeto
+## Download
 
-- `frontend.py`: Código responsável pela interface gráfica e interação do usuário.
-- `backend.py`: Código responsável pela lógica de extração e impressão dos arquivos.
-- `format_docx.py`, `format_xlsx.py`, `format_image.py`, `format_pdf.py`: Módulos para lidar com a formatação e impressão de diferentes tipos de arquivos.
+Baixe o `PrinterCAV.exe` na página de [Releases](https://github.com/MichaelRodriguesOficial/printer/releases).
+Não precisa instalar nada além dele.
 
-## Como Executar
+## Executar pelo código-fonte
 
-1. **Instale as dependências**:
-   - Certifique-se de ter o Python 3.x instalado.
-   - Instale as bibliotecas necessárias com o comando:
-     ```bash
-     pip install pillow patool pywin32
-     ```
+Requisitos: Windows 10/11 e Python 3.10 ou mais recente.
 
-2. **Execute o aplicativo**:
-   - Navegue até o diretório do projeto e execute o arquivo `frontend.py`:
-     ```bash
-     python frontend.py
-     ```
+```powershell
+git clone https://github.com/MichaelRodriguesOficial/printer.git
+cd printer
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
+```
 
-## Screenshots
+Para testar a interface sem imprimir de verdade (também funciona fora do Windows), use `python main.py --demo`.
 
-Aqui estão algumas capturas de tela do aplicativo em ação:
+## Gerar o executável
 
-### Tela Principal
+```powershell
+pip install -r requirements-dev.txt
+python tools/build.py
+```
 
-![Tela Principal Claro](https://github.com/MichaelRodriguesOficial/printer/blob/main/imagens/Claro.png?raw=true)
-![Tela Principal Escuro](https://github.com/MichaelRodriguesOficial/printer/blob/main/imagens/Escuro.png?raw=true)
+O arquivo é gerado em `dist\PrinterCAV.exe` (arquivo único, com ícone e informações de versão).
+Para conferir se o executável está íntegro, rode `PrinterCAV.exe --self-test`.
 
-### Avisos
+## Desenvolvimento
 
-![Avisos](https://github.com/MichaelRodriguesOficial/printer/blob/main/imagens/Avisos.png?raw=true)
+```powershell
+pip install -r requirements-dev.txt
+ruff check . ; ruff format --check .
+pytest
+```
 
-### Imprimindo
+- Os testes simulam o Windows (pywin32/COM) e rodam em qualquer sistema. Os testes de janela
+  precisam de um display (no Linux, use `xvfb-run`).
+- Os testes marcados como `windows` imprimem de verdade. No GitHub Actions é criada uma
+  impressora virtual *Microsoft Print to PDF* que grava em arquivo, e o teste confere as páginas do
+  PDF gerado. Para rodar localmente, defina `PRINTER_CAV_TEST_PRINTER` (e, opcionalmente,
+  `PRINTER_CAV_TEST_OUTPUT`).
+- A cada push, o CI gera o `.exe`, roda o autoteste e anexa o executável e as capturas de tela aos
+  artefatos. Ao criar uma tag `v*`, o `.exe` é publicado como release.
 
-![Imprimindo](https://github.com/MichaelRodriguesOficial/printer/blob/main/imagens/Imprimindo.png?raw=true)
+### Estrutura
 
-## Transformando o código em .exe com o PyInstaller
-
-     ```bash
-     pip install pyinstaller
-     ```
-     ```bash
-     pyinstaller --noconfirm --onefile --windowed --icon "C:\Github\Printer\img\favicon.ico" --add-data "C:\Github\Printer\img\sol.png;images" --add-data "C:\Github\Printer\img\lua.png;images" --hidden-import pkg_resources --hidden-import pkg_resources.extern "C:/Github/Printer/frontend.py"
-     ```
-
-## Contribuições
-
-Contribuições são bem-vindas! Se você encontrar algum problema ou tiver alguma sugestão, sinta-se à vontade para abrir uma issue ou enviar um pull request.
+```
+main.py                    ponto de entrada (também usado pelo PyInstaller)
+printer_app/
+  files.py, archives.py    montagem da fila e extração segura de compactados
+  printers.py              lista, status e preferências das impressoras do Windows
+  jobs.py                  execução do lote em segundo plano (com cancelamento)
+  printing/                impressão: gdi.py (PDF/imagens), pdf.py, images.py, office.py
+  ui/                      interface (CustomTkinter)
+  backend.py               Windows real ou modo demonstração
+tests/                     testes automatizados (pytest)
+tools/                     build do .exe e geração das capturas de tela
+```
 
 ## Licença
 
-Este projeto é licenciado sob a [MIT License](LICENSE).
-
-## Autor
-
-Desenvolvido por Michael Rodrigues.
-
+[MIT](LICENSE) © Michael Rodrigues
