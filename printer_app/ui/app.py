@@ -19,6 +19,7 @@ from tkinter import filedialog, messagebox, ttk
 
 import customtkinter as ctk
 from customtkinter.windows.widgets.appearance_mode import AppearanceModeTracker
+from customtkinter.windows.widgets.scaling import ScalingTracker
 from PIL import Image
 
 from .. import APP_NAME, __version__
@@ -287,7 +288,9 @@ class App(_Base):
             ("status", "Status", 170, True, "w"),
         ):
             self.tree.heading(col, text=title, anchor=anchor)
-            self.tree.column(col, width=width, minwidth=50, stretch=stretch, anchor=anchor)
+            self.tree.column(
+                col, width=self._px(width), minwidth=self._px(50), stretch=stretch, anchor=anchor
+            )
         self.tree.grid(row=0, column=0, sticky="nsew", padx=(10, 0), pady=10)
         scroll = ctk.CTkScrollbar(card, command=self.tree.yview)
         scroll.grid(row=0, column=1, sticky="ns", padx=(2, 6), pady=10)
@@ -364,7 +367,7 @@ class App(_Base):
             background=colors["bg"],
             fieldbackground=colors["bg"],
             foreground=colors["fg"],
-            rowheight=32,
+            rowheight=self._px(32),
             borderwidth=0,
             font=theme.tk_font(10),
         )
@@ -393,6 +396,14 @@ class App(_Base):
             activeforeground=colors["select_fg"],
             bd=0,
         )
+
+    def _px(self, value: int) -> int:
+        """Converte pixels lógicos para a escala do monitor (125%, 150%...); o ttk não escala."""
+        try:
+            scale = ScalingTracker.get_widget_scaling(self)
+        except Exception:  # noqa: BLE001
+            scale = 1.0
+        return round(value * scale)
 
     # ------------------------------------------------------------------ impressoras
 
