@@ -15,9 +15,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -68,9 +68,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -95,12 +95,15 @@ jobs:
       - name: Capturas de tela
         run: python tools/screenshot.py screenshots
 
-      - uses: actions/upload-artifact@v4
+      - name: TEMP capturas no log
+        run: python -c "import base64,glob; [print('@@' + p + '@@' + base64.b64encode(open(p, 'rb').read()).decode()) for p in glob.glob('screenshots/*.png')]"
+
+      - uses: actions/upload-artifact@v5
         with:
           name: PrinterCAV-${{ github.sha }}
           path: dist/PrinterCAV.exe
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: screenshots
           path: screenshots/*.png
