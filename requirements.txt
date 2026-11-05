@@ -1,0 +1,6 @@
+customtkinter>=5.2,<7
+tkinterdnd2>=0.4
+pypdfium2>=4.30,<6
+Pillow>=10.4
+patool>=2.0
+pywin32>=306; sys_platform == "win32"

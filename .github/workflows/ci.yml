@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    name: Testes no Windows (impressão real)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Instalar dependências
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Criar impressora de teste que grava em arquivo
+        shell: pwsh
+        run: |
+          Get-PrinterDriver | Select-Object -ExpandProperty Name
+          $out = Join-Path $env:RUNNER_TEMP "ci-print-output.pdf"
+          $driver = "Microsoft Print To PDF"
+          $format = "pdf"
+          if (-not (Get-PrinterDriver -Name $driver -ErrorAction SilentlyContinue)) {
+            try { Add-PrinterDriver -Name $driver -ErrorAction Stop }
+            catch {
+              $driver = (Get-PrinterDriver | Select-Object -First 1).Name
+              $format = "other"
+              $out = Join-Path $env:RUNNER_TEMP "ci-print-output.bin"
+            }
+          }
+          Add-PrinterPort -Name $out
+          Add-Printer -Name "CI-Printer" -DriverName $driver -PortName $out
+          Get-Printer | Format-Table Name, DriverName, PortName
+          "PRINTER_CAV_TEST_PRINTER=CI-Printer" >> $env:GITHUB_ENV
+          "PRINTER_CAV_TEST_OUTPUT=$out" >> $env:GITHUB_ENV
+          "PRINTER_CAV_TEST_FORMAT=$format" >> $env:GITHUB_ENV
+
+      - name: Instalar LibreOffice (alternativa ao Office)
+        run: choco install libreoffice-fresh -y --no-progress
+        timeout-minutes: 15
+
+      - name: Testes
+        run: python -m pytest -v -rs
+
+  build:
+    name: Gerar executável
+    needs: testes
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Instalar dependências
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: PyInstaller
+        run: python tools/build.py
+
+      - name: Autoteste do executável
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\PrinterCAV.exe -ArgumentList "--self-test" -Wait -PassThru
+          "Código de saída: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) {
+            Get-Content "$env:LOCALAPPDATA\PrinterCAV\logs\printer.log" -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+      - name: Capturas de tela
+        run: python tools/screenshot.py screenshots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PrinterCAV-${{ github.sha }}
+          path: dist/PrinterCAV.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots/*.png
+
+      - name: Publicar release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/PrinterCAV.exe
+          generate_release_notes: true
