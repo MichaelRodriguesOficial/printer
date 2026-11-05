@@ -95,16 +95,6 @@ jobs:
       - name: Capturas de tela
         run: python tools/screenshot.py screenshots
 
-      - name: TEMP capturas no log
-        shell: python
-        run: |
-          import base64, glob, os
-          for path in glob.glob("screenshots/*.png"):
-              data = base64.b64encode(open(path, "rb").read()).decode()
-              name = os.path.basename(path)
-              for i in range(0, len(data), 1000):
-                  print(f"@@{name}@@{i:08d}@@{data[i:i + 1000]}")
-
       - uses: actions/upload-artifact@v5
         with:
           name: PrinterCAV-${{ github.sha }}
