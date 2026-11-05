@@ -130,8 +130,8 @@ class App(_Base):
 
     def _setup_window(self) -> None:
         self.title(APP_NAME)
-        self.geometry("1040x640")
         self.minsize(860, 520)
+        self._fit_to_screen(1040, 640)
         icon = resource_path("assets/favicon.ico")
         try:
             if os.name == "nt":
@@ -148,6 +148,20 @@ class App(_Base):
             log.warning("Ícone não carregado: %s", exc)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
+
+    def _fit_to_screen(self, width: int, height: int) -> None:
+        """Tamanho inicial que cabe na tela (notebooks 1366x768 com escala de 125%) e centraliza."""
+        try:
+            scale = ScalingTracker.get_window_scaling(self)
+        except Exception:  # noqa: BLE001
+            scale = 1.0
+        screen_w = self.winfo_screenwidth() / scale
+        screen_h = self.winfo_screenheight() / scale
+        w = int(min(width, max(860, screen_w * 0.92)))
+        h = int(min(height, max(520, screen_h * 0.85)))
+        x = int(max(0, (screen_w - w) / 2))
+        y = int(max(0, (screen_h - h) / 3))
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
     # ------------------------------------------------------------------ barra lateral
 
@@ -282,10 +296,10 @@ class App(_Base):
         )
         for col, title, width, stretch, anchor in (
             ("name", "Arquivo", 230, True, "w"),
-            ("origin", "Origem", 140, True, "w"),
+            ("origin", "Origem", 130, True, "w"),
             ("kind", "Tipo", 80, False, "w"),
             ("pages", "Págs.", 54, False, "center"),
-            ("status", "Status", 170, True, "w"),
+            ("status", "Status", 190, True, "w"),
         ):
             self.tree.heading(col, text=title, anchor=anchor)
             self.tree.column(
@@ -541,17 +555,27 @@ class App(_Base):
         if isinstance(result, Exception):
             self._set_status(f"Erro ao preparar arquivos: {result}", theme.ERROR)
         else:
+            known = {item.entry.path for item in self.items.values()}
+            duplicates = 0
             for entry in result:  # type: ignore[union-attr]
                 if entry.kind is FileKind.ARCHIVE and entry.error is None:
                     continue
+                if entry.path in known:
+                    duplicates += 1
+                    continue
+                known.add(entry.path)
                 status = Status.PENDING if entry.printable else Status.SKIPPED
-                detail = entry.error or ("" if entry.printable else "tipo não suportado")
+                detail = entry.error or ("" if entry.printable else "não suportado")
                 iid = str(next(self._ids))
                 self.items[iid] = Item(entry, status, detail)
                 self.tree.insert(
                     "", "end", iid=iid, values=self._row(self.items[iid]), tags=(status.name,)
                 )
-            self._set_status("")
+            self._set_status(
+                f"{duplicates} arquivo(s) já estava(m) na lista e não foram repetidos."
+                if duplicates
+                else ""
+            )
         self._refresh_ui_state()
 
     @staticmethod

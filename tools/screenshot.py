@@ -57,13 +57,15 @@ def main() -> None:
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs" / "screenshots"
     out.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp())
-    samples = make_samples(tmp)
+    folder = tmp / "Pedidos novembro"
+    folder.mkdir()
+    samples = make_samples(folder)
     settings = tmp / "settings.json"
     settings.write_text('{"appearance": "light", "copies": 1}', encoding="utf-8")
     backend = DemoBackend(delay=0.25)
 
     def steps(app: App) -> None:
-        app.geometry("1040x640+20+20")
+        app.geometry("1000x620+0+0")  # cabe na tela 1024x768 do runner do CI
 
         def s1():
             grab(app, out / "vazio-claro.png")
@@ -79,6 +81,7 @@ def main() -> None:
             app.after(4000, s4)
 
         def s4():
+            app.appearance.set("Escuro")
             app._on_appearance("Escuro")
             app.after(800, s5)
 

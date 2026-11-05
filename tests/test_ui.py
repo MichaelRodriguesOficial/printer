@@ -160,6 +160,10 @@ def test_remove_clear_and_copies_bounds(make_app, files):
     app = make_app()
     app.add_paths([str(files / "foto.png"), str(files / "lote.zip")])
     pump(app, lambda: len(app.items) == 2 and not app._preparing)
+    app.add_paths([str(files / "foto.png")])  # repetido: não entra de novo
+    pump(app, lambda: not app._preparing)
+    assert len(app.items) == 2
+    assert "já estava" in app.status_label.cget("text")
     first = app.tree.get_children()[0]
     app.tree.selection_set(first)
     app.remove_selected()
