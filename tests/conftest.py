@@ -11,6 +11,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
 
 
 class FakeDC:
@@ -51,6 +52,9 @@ class FakeDC:
     def GetHandleOutput(self):
         return 1234
 
+    def GetSafeHdc(self):
+        return 5678
+
 
 @pytest.fixture
 def fake_gdi(monkeypatch):
@@ -72,6 +76,17 @@ def fake_gdi(monkeypatch):
             state["draws"].append((self.image.size, box))
 
     monkeypatch.setattr(ImageWin, "Dib", FakeDib)
+
+    import pypdfium2.raw as pdfium_c
+
+    def render_page(hdc, page, x, y, w, h, rotate, flags):
+        state["vector"].append((hdc, (x, y, w, h), rotate, flags))
+        calls.append(("RenderPage",))
+
+    state["vector"] = []
+    state["install_vector"] = lambda: monkeypatch.setattr(
+        pdfium_c, "FPDF_RenderPage", render_page, raising=False
+    )
     state["calls"] = calls
     return state
 

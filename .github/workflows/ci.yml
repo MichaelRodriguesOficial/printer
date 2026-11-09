@@ -60,6 +60,9 @@ jobs:
       - name: Testes
         run: python -m pytest -v -rs
 
+      - name: Benchmark de impressão (raster x vetorial)
+        run: python tools/benchmark_print.py CI-Printer --paginas 20 --saida $env:PRINTER_CAV_TEST_OUTPUT
+
   build:
     name: Gerar executável
     needs: testes

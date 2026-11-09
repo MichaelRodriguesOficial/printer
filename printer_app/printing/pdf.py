@@ -26,9 +26,24 @@ def _open(path: Path):
 
 
 def page_count(path: Path) -> int:
+    return inspect(path)[0]
+
+
+def inspect(path: Path) -> tuple[int, bool]:
+    """Valida o PDF e devolve ``(páginas, precisa_raster)``.
+
+    Formulários XFA só são desenhados corretamente pela renderização completa em bitmap;
+    todo o resto pode ir para a impressora em vetor.
+    """
+    import pypdfium2.raw as pdfium_c
+
     doc = _open(path)
     try:
-        return len(doc)
+        pages = len(doc)
+        if pages == 0:
+            raise PdfError("PDF sem páginas")
+        xfa = doc.get_formtype() in (pdfium_c.FORMTYPE_XFA_FULL, pdfium_c.FORMTYPE_XFA_FOREGROUND)
+        return pages, xfa
     finally:
         doc.close()
 

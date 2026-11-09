@@ -69,7 +69,10 @@ def _check_image(path: Path) -> None:
 
 
 def _print_pdf(path: Path, title: str, ctx: PrintContext) -> int:
-    pdf.page_count(path)  # valida (senha/corrompido) antes de abrir a impressora
+    # Valida (senha/corrompido) antes de abrir um trabalho na impressora.
+    _pages, needs_raster = pdf.inspect(path)
+    if not needs_raster and gdi.vector_available():
+        return gdi.print_pdf_vector(ctx.printer, path, title, ctx.copies, ctx.cancel)
     return gdi.print_pages(
         ctx.printer, title, lambda dpi: pdf.pdf_pages(path, dpi), ctx.copies, ctx.cancel
     )
