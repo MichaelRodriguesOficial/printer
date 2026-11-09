@@ -1,6 +1,6 @@
 [project]
 name = "printer-cav"
-version = "2.0.0"
+version = "2.1.0"
 description = "App de Impressão CAV SUL — impressão em lote de arquivos, pastas e compactados no Windows"
 readme = "README.md"
 license = "MIT"

@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.1.0] — 2026-11
+
+Impressão mais rápida, principalmente em lotes de PDF.
+
+### Desempenho
+- **PDF vetorial:** o PDF é desenhado direto na impressora (texto e vetores), como fazem o Foxit e o
+  Chrome, em vez de virar uma imagem de 300 dpi por página. Para 20 páginas de texto, os dados
+  enviados à impressora caíram de 1 GB para 16 MB num driver PostScript clássico e de 56 MB para
+  8 MB no driver PCL6 do Windows. No PostScript, o tempo total ficou 4x menor.
+- **Conexão com a impressora reaproveitada** durante o lote, em vez de reaberta a cada arquivo.
+- Fotos grandes são reduzidas ao tamanho impresso antes do envio, e imagens em tons de cinza
+  seguem em 8 bits.
+- O resumo do lote mostra o tempo total ("Concluído em 12 s"), e o log registra o tempo de cada arquivo.
+
+### Novidades
+- Chave **"PDF rápido (vetorial)"** na barra lateral, ligada por padrão. Se alguma impressora
+  imprimir PDFs com defeito, basta desligar para voltar ao modo imagem.
+- `tools/benchmark_print.py` compara os modos numa impressora. O CI roda esse benchmark
+  em seis drivers do Windows a cada push.
+
 ## [2.0.0] — 2026-11
 
 Reescrita completa: nova interface, impressão confiável na impressora escolhida e testes
