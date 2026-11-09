@@ -58,6 +58,23 @@ def _wait_queue(printer: str, output: Path | None, timeout: float = 300) -> int:
     raise TimeoutError("o trabalho não saiu da fila a tempo")
 
 
+def _has_text(output: Path | None) -> str:
+    """Se a saída é PDF, diz se o texto continuou selecionável (sinal de envio vetorial)."""
+    if output is None or output.suffix.lower() != ".pdf":
+        return "—"
+    import pypdfium2 as pdfium
+
+    try:
+        doc = pdfium.PdfDocument(str(output))
+        try:
+            text = doc[0].get_textpage().get_text_range()
+        finally:
+            doc.close()
+    except Exception:  # noqa: BLE001
+        return "?"
+    return "sim" if "Consultora" in text else "não"
+
+
 def run(printer: str, pages: int, output: Path | None) -> list[dict]:
     with tempfile.TemporaryDirectory() as tmp:
         doc = make_text_pdf(Path(tmp) / "benchmark.pdf", pages=pages)
@@ -84,6 +101,7 @@ def run(printer: str, pages: int, output: Path | None) -> list[dict]:
                     "total_s": total,
                     "spool_mb": spool / 1024**2,
                     "saida_mb": output.stat().st_size / 1024**2 if output else None,
+                    "texto": _has_text(output),
                 }
             )
     return results
@@ -93,14 +111,14 @@ def to_markdown(results: list[dict], pages: int) -> str:
     lines = [
         f"### Benchmark de impressão — PDF de texto com {pages} páginas",
         "",
-        "| Modo | Envio ao spooler | Até sair da fila | Spool | Arquivo gerado |",
-        "|---|---:|---:|---:|---:|",
+        "| Modo | Envio ao spooler | Até sair da fila | Spool | Arquivo gerado | Texto na saída |",
+        "|---|---:|---:|---:|---:|:---:|",
     ]
     for r in results:
         out = f"{r['saida_mb']:.2f} MB" if r["saida_mb"] is not None else "—"
         lines.append(
             f"| {r['modo']} | {r['envio_s']:.2f} s | {r['total_s']:.2f} s "
-            f"| {r['spool_mb']:.2f} MB | {out} |"
+            f"| {r['spool_mb']:.2f} MB | {out} | {r['texto']} |"
         )
     if len(results) == 2 and results[1]["total_s"] > 0:
         lines.append("")

@@ -40,9 +40,9 @@ def make_app(tmp_path, monkeypatch):
                 break
             except tkinter.TclError as exc:
                 # Falha intermitente conhecida do Tcl/Tk no Windows ao criar vários Tk()
-                # seguidos no mesmo processo ("Can't find a usable tk.tcl"). O app real
+                # seguidos no mesmo processo ("Can't find a usable init.tcl/tk.tcl"). O app real
                 # cria um único Tk, então só os testes precisam tentar de novo.
-                if "tk.tcl" not in str(exc) or attempt == 2:
+                if "Can't find a usable" not in str(exc) or attempt == 2:
                     raise
                 time.sleep(0.5)
         app.asked = asked
