@@ -66,15 +66,12 @@ jobs:
     name: Benchmark de impressão
     runs-on: windows-latest
     timeout-minutes: 30
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements*.txt
 
       - name: Instalar dependências
         run: python -m pip install -r requirements.txt
@@ -109,7 +106,9 @@ jobs:
           foreach ($item in (Get-Content bench-printers.txt -Raw).Trim().Split(";")) {
             $name, $out = $item.Split("|")
             python tools/benchmark_print.py "$name" --paginas 20 --saida "$out"
+            if ($LASTEXITCODE -ne 0) { "::warning::Benchmark falhou em $name" }
           }
+          exit 0
 
   build:
     name: Gerar executável
