@@ -27,32 +27,18 @@ from pdfgen import make_text_pdf  # noqa: E402
 from printer_app.printing import gdi, pdf  # noqa: E402
 
 
-def _job_sizes(printer: str) -> int:
-    """Maior tamanho de spool visto entre os trabalhos na fila (bytes)."""
-    import win32print
-
-    handle = win32print.OpenPrinter(printer, {"DesiredAccess": 0x8})
-    try:
-        jobs = win32print.EnumJobs(handle, 0, 999, 2)
-    finally:
-        win32print.ClosePrinter(handle)
-    return max((job.get("Size", 0) for job in jobs), default=0)
-
-
-def _wait_queue(printer: str, output: Path | None, timeout: float = 300) -> int:
+def _wait_queue(printer: str, output: Path | None, timeout: float = 300) -> None:
     from printer_app.printers import pending_jobs
 
     deadline = time.monotonic() + timeout
-    spool = 0
     last_size = -1
     while time.monotonic() < deadline:
-        spool = max(spool, _job_sizes(printer))
         if pending_jobs(printer) == 0:
             if output is None:
-                return spool
+                return
             size = output.stat().st_size if output.exists() else -1
             if size > 0 and size == last_size:
-                return spool
+                return
             last_size = size
         time.sleep(0.25)
     raise TimeoutError("o trabalho não saiu da fila a tempo")
@@ -75,56 +61,84 @@ def _has_text(output: Path | None) -> str:
     return "sim" if "Consultora" in text else "não"
 
 
+def _send(printer: str, files: list[Path], mode: str, reuse_dc: bool) -> int:
+    session = gdi.PrinterDC(printer) if reuse_dc else None
+    target = session or printer
+    printed = 0
+    try:
+        for path in files:
+            if mode == "vector":
+                printed += gdi.print_pdf_vector(target, path, path.name)
+            else:
+                printed += gdi.print_pages(
+                    target, path.name, lambda dpi, p=path: pdf.pdf_pages(p, dpi)
+                )
+    finally:
+        if session is not None:
+            session.close()
+    return printed
+
+
 def run(printer: str, pages: int, output: Path | None) -> list[dict]:
     with tempfile.TemporaryDirectory() as tmp:
-        doc = make_text_pdf(Path(tmp) / "benchmark.pdf", pages=pages)
-        modes = {
-            "raster (v2.0.0)": lambda: gdi.print_pages(
-                printer, "benchmark-raster", lambda dpi: pdf.pdf_pages(doc, dpi)
+        tmp = Path(tmp)
+        big = [make_text_pdf(tmp / "relatorio.pdf", pages=pages)]
+        many = [make_text_pdf(tmp / f"boleto{i:02d}.pdf", pages=1) for i in range(pages)]
+        cases = [
+            (f"1 PDF de {pages} págs", "v2.0.0: imagem", big, "raster", False),
+            (f"1 PDF de {pages} págs", "novo: vetorial", big, "vector", True),
+            (
+                f"{pages} PDFs de 1 pág",
+                "v2.0.0: imagem, 1 conexão por arquivo",
+                many,
+                "raster",
+                False,
             ),
-            "vetorial (novo)": lambda: gdi.print_pdf_vector(printer, doc, "benchmark-vetor"),
-        }
+            (f"{pages} PDFs de 1 pág", "imagem + conexão reaproveitada", many, "raster", True),
+            (
+                f"{pages} PDFs de 1 pág",
+                "novo: vetorial + conexão reaproveitada",
+                many,
+                "vector",
+                True,
+            ),
+        ]
         results = []
-        for name, send in modes.items():
+        for scenario, name, files, mode, reuse in cases:
             if output is not None and output.exists():
                 output.unlink()
             start = time.perf_counter()
-            printed = send()
+            printed = _send(printer, files, mode, reuse)
             sent = time.perf_counter() - start
-            spool = _wait_queue(printer, output)
+            _wait_queue(printer, output if len(files) == 1 else None)
             total = time.perf_counter() - start
+            single = output is not None and len(files) == 1
             results.append(
                 {
+                    "cenario": scenario,
                     "modo": name,
                     "paginas": printed,
                     "envio_s": sent,
                     "total_s": total,
-                    "spool_mb": spool / 1024**2,
-                    "saida_mb": output.stat().st_size / 1024**2 if output else None,
-                    "texto": _has_text(output),
+                    "saida_mb": output.stat().st_size / 1024**2 if single else None,
+                    "texto": _has_text(output) if single else "—",
                 }
             )
     return results
 
 
-def to_markdown(results: list[dict], pages: int) -> str:
+def to_markdown(results: list[dict], printer: str) -> str:
     lines = [
-        f"### Benchmark de impressão — PDF de texto com {pages} páginas",
+        f"### Benchmark de impressão — {printer}",
         "",
-        "| Modo | Envio ao spooler | Até sair da fila | Spool | Arquivo gerado | Texto na saída |",
-        "|---|---:|---:|---:|---:|:---:|",
+        "| Cenário | Modo | Envio ao spooler | Até sair da fila | Arquivo gerado | Texto |",
+        "|---|---|---:|---:|---:|:---:|",
     ]
     for r in results:
         out = f"{r['saida_mb']:.2f} MB" if r["saida_mb"] is not None else "—"
         lines.append(
-            f"| {r['modo']} | {r['envio_s']:.2f} s | {r['total_s']:.2f} s "
-            f"| {r['spool_mb']:.2f} MB | {out} | {r['texto']} |"
-        )
-    if len(results) == 2 and results[1]["total_s"] > 0:
-        lines.append("")
-        lines.append(
-            f"**Vetorial {results[0]['total_s'] / results[1]['total_s']:.1f}x mais rápido "
-            f"no tempo total.**"
+            f"| {r['cenario']} | {r['modo']} | {r['envio_s']:.2f} s | {r['total_s']:.2f} s "
+            f"| {out} | {r['texto']} |"
         )
     return "\n".join(lines)
 
@@ -137,7 +151,7 @@ def main() -> None:
     args = parser.parse_args()
     if not gdi.vector_available():
         sys.exit("Impressão vetorial indisponível: rode no Windows.")
-    text = to_markdown(run(args.impressora, args.paginas, args.saida), args.paginas)
+    text = to_markdown(run(args.impressora, args.paginas, args.saida), args.impressora)
     print(text)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:

@@ -197,13 +197,20 @@ def test_remove_clear_and_copies_bounds(make_app, files):
 def test_settings_saved_on_close(make_app, tmp_path):
     app = make_app()
     app._on_appearance("Escuro")
+    app.fast_pdf_switch.deselect()
+    app._on_pdf_mode()
     app.copies_var.set("3")
     app.printer_var.set("BRA3-FINANCEIRO")
     app._on_printer_selected("BRA3-FINANCEIRO")
     workdir = app.workdir
     app.on_close()
     saved = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
-    assert saved == {"printer": "BRA3-FINANCEIRO", "copies": 3, "appearance": "dark"}
+    assert saved == {
+        "printer": "BRA3-FINANCEIRO",
+        "copies": 3,
+        "appearance": "dark",
+        "pdf_mode": "raster",
+    }
     assert not workdir.exists()
 
 

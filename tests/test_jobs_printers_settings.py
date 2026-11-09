@@ -201,6 +201,10 @@ def test_settings_roundtrip_and_validation(tmp_path):
     assert load_settings(path) == Settings()
     save_settings(Settings(printer="BRA3", copies=500, appearance="dark"), path)
     assert load_settings(path) == Settings(printer="BRA3", copies=99, appearance="dark")
+    save_settings(Settings(pdf_mode="raster"), path)
+    assert load_settings(path).pdf_mode == "raster"
+    path.write_text('{"pdf_mode": "turbo"}', encoding="utf-8")
+    assert load_settings(path).pdf_mode == "vector"
     path.write_text('{"copies": "abc", "appearance": "neon", "extra": 1}', encoding="utf-8")
     assert load_settings(path) == Settings()
     path.write_text("{corrompido", encoding="utf-8")

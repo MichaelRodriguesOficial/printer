@@ -62,28 +62,69 @@ def orient_for_page(img: Image.Image, page_w: int, page_h: int) -> Image.Image:
     return img
 
 
-@contextmanager
-def printer_job(printer_name: str, doc_name: str) -> Iterator[tuple[object, PrinterPage]]:
-    """Abre um trabalho na impressora; em caso de erro/cancelamento o trabalho é abortado."""
-    import win32ui
+class PrinterDC:
+    """Device context da impressora reaproveitado entre os arquivos de um lote.
 
-    dc = win32ui.CreateDC()
-    dc.CreatePrinterDC(printer_name)
+    Criar o DC de uma impressora de rede consulta o driver e o servidor de impressão;
+    fazer isso uma vez por lote (e não por arquivo) elimina essa espera em lotes com
+    muitos arquivos pequenos (boletos, pedidos...).
+    """
+
+    def __init__(self, printer_name: str) -> None:
+        self.printer_name = printer_name
+        self._dc = None
+        self.paper: PrinterPage | None = None
+
+    def get(self) -> tuple[object, PrinterPage]:
+        if self._dc is None:
+            import win32ui
+
+            dc = win32ui.CreateDC()
+            dc.CreatePrinterDC(self.printer_name)
+            self.paper = PrinterPage(
+                dc.GetDeviceCaps(HORZRES),
+                dc.GetDeviceCaps(VERTRES),
+                dc.GetDeviceCaps(LOGPIXELSX) or 300,
+            )
+            self._dc = dc
+        return self._dc, self.paper
+
+    def close(self) -> None:
+        if self._dc is not None:
+            try:
+                self._dc.DeleteDC()
+            finally:
+                self._dc = None
+
+
+@contextmanager
+def printer_job(printer: str | PrinterDC, doc_name: str) -> Iterator[tuple[object, PrinterPage]]:
+    """Abre um trabalho na impressora; em caso de erro/cancelamento o trabalho é abortado.
+
+    Com um nome de impressora, o DC é criado e destruído aqui; com um :class:`PrinterDC`,
+    ele é reaproveitado (e descartado só se o driver falhar, para o próximo arquivo
+    começar com um DC limpo).
+    """
+    owned = isinstance(printer, str)
+    session = PrinterDC(printer) if owned else printer
+    dc, paper = session.get()
+    keep = False
     try:
-        info = PrinterPage(
-            dc.GetDeviceCaps(HORZRES),
-            dc.GetDeviceCaps(VERTRES),
-            dc.GetDeviceCaps(LOGPIXELSX) or 300,
-        )
         dc.StartDoc(doc_name[:120])
         try:
-            yield dc, info
-            dc.EndDoc()
+            yield dc, paper
+        except (Cancelled, ValueError):
+            dc.AbortDoc()
+            keep = True  # problema do conteúdo/usuário; o DC continua bom
+            raise
         except BaseException:
             dc.AbortDoc()
             raise
+        dc.EndDoc()
+        keep = True
     finally:
-        dc.DeleteDC()
+        if owned or not keep:
+            session.close()
 
 
 def _check_cancel(cancel: threading.Event | None) -> None:
@@ -92,7 +133,7 @@ def _check_cancel(cancel: threading.Event | None) -> None:
 
 
 def print_pages(
-    printer_name: str,
+    printer_name: str | PrinterDC,
     doc_name: str,
     pages: PageFactory,
     copies: int = 1,
@@ -131,7 +172,7 @@ def _shrink_to_box(img: Image.Image, box: tuple[int, int, int, int]) -> Image.Im
 
 
 def print_pdf_vector(
-    printer_name: str,
+    printer_name: str | PrinterDC,
     path: Path,
     doc_name: str,
     copies: int = 1,

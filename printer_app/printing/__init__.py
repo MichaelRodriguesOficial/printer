@@ -14,11 +14,14 @@ from .gdi import Cancelled
 from .office import OfficeError, OfficeSession, _PrintViaPdf
 from .pdf import PdfError
 
-__all__ = ["Cancelled", "PrintContext", "PrintError", "print_entry"]
+__all__ = ["PDF_MODES", "Cancelled", "PrintContext", "PrintError", "print_entry"]
 
 
 class PrintError(Exception):
     """Falha de impressão com mensagem pronta para o usuário."""
+
+
+PDF_MODES = ("vector", "raster")
 
 
 @dataclass
@@ -27,6 +30,13 @@ class PrintContext:
     copies: int = 1
     cancel: threading.Event = field(default_factory=threading.Event)
     office: OfficeSession = field(default_factory=OfficeSession)
+    pdf_mode: str = "vector"
+    printer_dc: gdi.PrinterDC | None = None
+
+    @property
+    def target(self) -> str | gdi.PrinterDC:
+        """DC reaproveitado no lote (se houver) ou o nome da impressora."""
+        return self.printer_dc if self.printer_dc is not None else self.printer
 
 
 def print_entry(entry: Entry, ctx: PrintContext) -> int | None:
@@ -39,7 +49,7 @@ def print_entry(entry: Entry, ctx: PrintContext) -> int | None:
         if entry.kind is FileKind.IMAGE:
             _check_image(entry.path)
             return gdi.print_pages(
-                ctx.printer,
+                ctx.target,
                 entry.display,
                 lambda _dpi: images.image_pages(entry.path),
                 ctx.copies,
@@ -71,10 +81,10 @@ def _check_image(path: Path) -> None:
 def _print_pdf(path: Path, title: str, ctx: PrintContext) -> int:
     # Valida (senha/corrompido) antes de abrir um trabalho na impressora.
     _pages, needs_raster = pdf.inspect(path)
-    if not needs_raster and gdi.vector_available():
-        return gdi.print_pdf_vector(ctx.printer, path, title, ctx.copies, ctx.cancel)
+    if ctx.pdf_mode == "vector" and not needs_raster and gdi.vector_available():
+        return gdi.print_pdf_vector(ctx.target, path, title, ctx.copies, ctx.cancel)
     return gdi.print_pages(
-        ctx.printer, title, lambda dpi: pdf.pdf_pages(path, dpi), ctx.copies, ctx.cancel
+        ctx.target, title, lambda dpi: pdf.pdf_pages(path, dpi), ctx.copies, ctx.cancel
     )
 
 

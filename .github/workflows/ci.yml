@@ -55,14 +55,61 @@ jobs:
 
       - name: Instalar LibreOffice (alternativa ao Office)
         run: choco install libreoffice-fresh -y --no-progress
-        timeout-minutes: 15
+        timeout-minutes: 12
+        continue-on-error: true  # o mirror do Chocolatey às vezes trava; os testes pulam sem LO
 
       - name: Testes
         run: python -m pytest -v -rs
 
-      - name: Benchmark de impressão (raster x vetorial)
-        if: always()
-        run: python tools/benchmark_print.py CI-Printer --paginas 20 --saida $env:PRINTER_CAV_TEST_OUTPUT
+
+  benchmark:
+    name: Benchmark de impressão
+    runs-on: windows-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Instalar dependências
+        run: python -m pip install -r requirements.txt
+
+      - name: Criar impressoras virtuais (um driver de cada tipo disponível)
+        shell: pwsh
+        run: |
+          $drivers = "Microsoft Print To PDF", "Microsoft IPP Class Driver",
+                     "Microsoft PCL6 Class Driver", "Microsoft PS Class Driver",
+                     "MS Publisher Color Printer", "Generic / Text Only"
+          $list = @()
+          foreach ($d in $drivers) {
+            if (-not (Get-PrinterDriver -Name $d -ErrorAction SilentlyContinue)) {
+              try { Add-PrinterDriver -Name $d -ErrorAction Stop }
+              catch { "Driver indisponível: $d"; continue }
+            }
+            $safe = $d -replace '[^A-Za-z0-9]', ''
+            $ext = if ($d -eq "Microsoft Print To PDF") { "pdf" } else { "out" }
+            $out = Join-Path $env:RUNNER_TEMP "bench-$safe.$ext"
+            try {
+              Add-PrinterPort -Name $out -ErrorAction Stop
+              Add-Printer -Name "Bench $d" -DriverName $d -PortName $out -ErrorAction Stop
+              $list += "Bench $d|$out"
+              "Impressora criada: Bench $d"
+            } catch { "Falhou ao criar impressora com $d : $_" }
+          }
+          ($list -join ";") | Out-File -Encoding utf8 bench-printers.txt
+
+      - name: Benchmark (raster x vetorial, conexão por arquivo x reaproveitada)
+        shell: pwsh
+        run: |
+          foreach ($item in (Get-Content bench-printers.txt -Raw).Trim().Split(";")) {
+            $name, $out = $item.Split("|")
+            python tools/benchmark_print.py "$name" --paginas 20 --saida "$out"
+          }
 
   build:
     name: Gerar executável

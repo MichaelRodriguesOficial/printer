@@ -254,3 +254,74 @@ def test_grayscale_images_stay_8bit(tmp_path):
 
 def test_pdf_inspect_reports_pages_and_raster_need(sample_pdf):
     assert pdf.inspect(sample_pdf(pages=2)) == (2, False)
+
+
+def _run_batch(paths, pdf_mode="vector"):
+    import queue
+
+    from printer_app.jobs import PrintJob
+
+    class NoOffice:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+    events: queue.Queue = queue.Queue()
+    job = PrintJob(
+        [(i, _entry(p, FileKind.PDF)) for i, p in enumerate(paths)],
+        "Rede",
+        1,
+        events,
+        session_factory=NoOffice,
+        pdf_mode=pdf_mode,
+    )
+    job.start()
+    job.join(10)
+    return job
+
+
+def test_batch_reuses_one_printer_dc(fake_gdi, sample_pdf):
+    """Lote com vários arquivos abre a impressora uma vez só (um trabalho por arquivo)."""
+    fake_gdi["install_vector"]()
+    paths = [sample_pdf(f"boleto{i}.pdf", pages=1) for i in range(3)]
+    job = _run_batch(paths)
+    calls = fake_gdi["calls"]
+    assert job.summary.done == 3
+    assert calls.count(("CreatePrinterDC", "Rede")) == 1
+    assert [c[1] for c in calls if c[0] == "StartDoc"] == [
+        "boleto0.pdf",
+        "boleto1.pdf",
+        "boleto2.pdf",
+    ]
+    assert calls.count(("EndDoc",)) == 3
+    assert calls[-1] == ("DeleteDC",) and calls.count(("DeleteDC",)) == 1
+
+
+def test_driver_error_discards_dc_and_next_file_gets_a_new_one(fake_gdi, sample_pdf):
+    import sys
+
+    from conftest import FakeDC
+
+    created = []
+
+    def create_dc():  # só o 1º DC tem driver com defeito
+        created.append(1)
+        return FakeDC(fake_gdi["calls"], fail_on_page=1 if len(created) == 1 else None)
+
+    sys.modules["win32ui"].CreateDC = create_dc
+    paths = [sample_pdf(f"f{i}.pdf", pages=1) for i in range(2)]
+    job = _run_batch(paths, pdf_mode="raster")
+    calls = fake_gdi["calls"]
+    assert (job.summary.errors, job.summary.done) == (1, 1)
+    assert calls.count(("CreatePrinterDC", "Rede")) == 2
+    assert calls.count(("AbortDoc",)) == 1 and calls.count(("EndDoc",)) == 1
+    assert calls.count(("DeleteDC",)) == 2
+
+
+def test_raster_mode_is_respected(fake_gdi, sample_pdf):
+    fake_gdi["install_vector"]()
+    ctx = PrintContext("P", pdf_mode="raster")
+    print_entry(_entry(sample_pdf(pages=2), FileKind.PDF), ctx)
+    assert fake_gdi["vector"] == [] and len(fake_gdi["draws"]) == 2
