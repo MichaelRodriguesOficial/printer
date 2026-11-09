@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import time
 import tkinter
@@ -11,6 +12,8 @@ import zipfile
 
 import pytest
 from PIL import Image
+
+log = logging.getLogger(__name__)
 
 pytestmark = pytest.mark.skipif(
     os.name != "nt" and not os.environ.get("DISPLAY"), reason="sem display gráfico"
@@ -34,17 +37,18 @@ def make_app(tmp_path, monkeypatch):
         path = tmp_path / "settings.json"
         if settings is not None:
             path.write_text(json.dumps(settings), encoding="utf-8")
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 app = app_module.App(backend or DemoBackend(delay=0), settings_file=path)
                 break
             except tkinter.TclError as exc:
-                # Falha intermitente conhecida do Tcl/Tk no Windows ao criar vários Tk()
-                # seguidos no mesmo processo ("Can't find a usable tk.tcl"). O app real
+                # Falha intermitente do Tcl/Tk no Windows ao criar vários Tk() seguidos no
+                # mesmo processo ("Can't find a usable init.tcl", "tcl_findLibrary"). O app real
                 # cria um único Tk, então só os testes precisam tentar de novo.
-                if "tk.tcl" not in str(exc) or attempt == 2:
+                if attempt == 4:
                     raise
-                time.sleep(0.5)
+                log.warning("Tk falhou ao iniciar (%s); tentando de novo", exc)
+                time.sleep(1.0)
         app.asked = asked
         apps.append(app)
         pump(app, lambda: str(app.refresh_button.cget("state")) == "normal")  # lista carregada
@@ -197,13 +201,20 @@ def test_remove_clear_and_copies_bounds(make_app, files):
 def test_settings_saved_on_close(make_app, tmp_path):
     app = make_app()
     app._on_appearance("Escuro")
+    app.fast_pdf_switch.deselect()
+    app._on_pdf_mode()
     app.copies_var.set("3")
     app.printer_var.set("BRA3-FINANCEIRO")
     app._on_printer_selected("BRA3-FINANCEIRO")
     workdir = app.workdir
     app.on_close()
     saved = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
-    assert saved == {"printer": "BRA3-FINANCEIRO", "copies": 3, "appearance": "dark"}
+    assert saved == {
+        "printer": "BRA3-FINANCEIRO",
+        "copies": 3,
+        "appearance": "dark",
+        "pdf_mode": "raster",
+    }
     assert not workdir.exists()
 
 

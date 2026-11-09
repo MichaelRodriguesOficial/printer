@@ -12,6 +12,7 @@ from .paths import user_data_dir
 log = logging.getLogger(__name__)
 
 APPEARANCES = ("system", "light", "dark")
+PDF_MODES = ("vector", "raster")
 MAX_COPIES = 99
 
 
@@ -20,6 +21,7 @@ class Settings:
     printer: str | None = None
     copies: int = 1
     appearance: str = "system"
+    pdf_mode: str = "vector"
 
     def normalized(self) -> Settings:
         copies = self.copies if isinstance(self.copies, int) else 1
@@ -27,6 +29,7 @@ class Settings:
             printer=self.printer if isinstance(self.printer, str) and self.printer else None,
             copies=min(max(copies, 1), MAX_COPIES),
             appearance=self.appearance if self.appearance in APPEARANCES else "system",
+            pdf_mode=self.pdf_mode if self.pdf_mode in PDF_MODES else "vector",
         )
 
 

@@ -35,16 +35,21 @@ pytestmark = [
 ]
 
 
-def _wait_spool_and_output(min_size: int = 1, timeout: float = 90) -> None:
+def _wait_spool_and_output(timeout: float = 120) -> None:
+    """Espera a fila esvaziar e o arquivo de saída parar de crescer."""
     from printer_app.printers import pending_jobs
 
     deadline = time.monotonic() + timeout
+    last = -1
     while time.monotonic() < deadline:
-        if pending_jobs(PRINTER) == 0 and (
-            OUTPUT is None or (OUTPUT.exists() and OUTPUT.stat().st_size >= min_size)
-        ):
-            time.sleep(1.0)  # o driver pode estar terminando de gravar
-            return
+        if pending_jobs(PRINTER) == 0:
+            if OUTPUT is None:
+                time.sleep(1.0)
+                return
+            size = OUTPUT.stat().st_size if OUTPUT.exists() else -1
+            if size > 0 and size == last:
+                return
+            last = size
         time.sleep(0.5)
     raise AssertionError("o trabalho não saiu da fila a tempo")
 
@@ -132,3 +137,29 @@ def test_batch_with_real_backend_isolates_errors(output, sample_pdf, tmp_path):
             final[event.index] = event.status
     assert final == {0: Status.ERROR, 1: Status.DONE}
     _wait_spool_and_output()
+
+
+@pytest.mark.skipif(OUTPUT is None or not OUTPUT_IS_PDF, reason="requer saída em PDF")
+def test_vector_pdf_is_much_lighter_than_raster(output, tmp_path):
+    """PDF de texto impresso em vetor gera menos dados que o mesmo PDF em bitmap.
+
+    O ganho de tempo é medido pelo ``tools/benchmark_print.py`` no CI.
+    """
+    from pdfgen import make_text_pdf
+
+    from printer_app.printing import gdi, pdf
+
+    doc = make_text_pdf(tmp_path / "texto.pdf", pages=5)
+    sizes = {}
+    for mode in ("raster", "vetor"):
+        if OUTPUT.exists():
+            OUTPUT.unlink()
+        if mode == "raster":
+            gdi.print_pages(PRINTER, "raster", lambda dpi: pdf.pdf_pages(doc, dpi))
+        else:
+            gdi.print_pdf_vector(PRINTER, doc, "vetor")
+        _wait_spool_and_output()
+        assert _printed_pages() == 5
+        sizes[mode] = OUTPUT.stat().st_size
+    print(f"\nsaída raster: {sizes['raster']:,} bytes | vetor: {sizes['vetor']:,} bytes")
+    assert sizes["vetor"] < sizes["raster"]

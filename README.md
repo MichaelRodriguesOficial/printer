@@ -21,10 +21,13 @@ na impressora escolhida. Você monta a fila, confere o que vai sair e acompanha 
   porta aberta…) e acesso às **preferências** (frente e verso, cor, bandeja).
 - Tema **claro, escuro ou do sistema**. O app lembra a última impressora, as cópias e o tema.
 - **Log** para o suporte de TI, aberto pelo link *Abrir logs*.
+- **PDF rápido (vetorial)**: o PDF vai para a impressora como texto e vetores, como no Foxit,
+  com muito menos dados que uma imagem por página. A chave na barra lateral volta ao modo
+  imagem se algum driver tiver problema.
 
 | Tipo | Extensões | Como imprime |
 |---|---|---|
-| PDF | `.pdf` | PDFium (motor do Chrome), direto na impressora; não depende do leitor de PDF instalado |
+| PDF | `.pdf` | PDFium (motor do Chrome) desenha direto na impressora em vetor; não depende do leitor de PDF instalado |
 | Imagens | `.png .jpg .jpeg .jfif .bmp .gif .tif .tiff .webp` | Direto na impressora, ajustada à página, com rotação automática e fundo branco em transparências |
 | Word | `.doc .docx .docm .rtf .odt .txt` | Microsoft Word (oculto, com macros desabilitadas); sem Office, pelo LibreOffice |
 | Excel | `.xls .xlsx .xlsm .xlsb .csv .ods` | Microsoft Excel (oculto, com macros desabilitadas); sem Office, pelo LibreOffice |
@@ -79,6 +82,9 @@ pytest
   impressora virtual *Microsoft Print to PDF* que grava em arquivo, e o teste confere as páginas do
   PDF gerado. Para rodar localmente, defina `PRINTER_CAV_TEST_PRINTER` (e, opcionalmente,
   `PRINTER_CAV_TEST_OUTPUT`).
+- `tools/benchmark_print.py "Impressora"` compara os modos de impressão de PDF (imagem x vetorial)
+  e mede o ganho de reaproveitar a conexão no lote. Ele imprime de verdade, então use uma impressora
+  virtual ou uma fila pausada. O CI roda esse benchmark em seis drivers do Windows.
 - A cada push, o CI gera o `.exe`, roda o autoteste e anexa o executável e as capturas de tela aos
   artefatos. Ao criar uma tag `v*`, o `.exe` é publicado como release.
 

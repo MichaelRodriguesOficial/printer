@@ -176,3 +176,152 @@ def test_print_entry_errors_become_print_error(tmp_path):
         print_entry(_entry(bad, FileKind.UNSUPPORTED), ctx)
     with pytest.raises(PrintError, match="senha"):
         print_entry(_entry(bad, FileKind.ARCHIVE, "Compactado protegido por senha"), ctx)
+
+
+# --- desempenho: PDF vetorial e imagens enxutas ------------------------------------
+
+
+def test_pdf_goes_vector_when_available(fake_gdi, sample_pdf):
+    """No Windows o PDF é desenhado direto na impressora, sem virar bitmap."""
+    fake_gdi["install_vector"]()
+    assert gdi.vector_available()
+    path = sample_pdf(pages=2)
+    ctx = PrintContext("Financeiro", copies=2)
+    assert print_entry(_entry(path, FileKind.PDF), ctx) == 4
+    assert fake_gdi["draws"] == []  # nenhum bitmap enviado
+    assert len(fake_gdi["vector"]) == 4
+    hdc, box, rotate, flags = fake_gdi["vector"][0]
+    assert hdc == 5678 and rotate == 0 and flags == gdi.FPDF_ANNOT | gdi.FPDF_PRINTING
+    # A4 (595x842 pt) encaixado na área imprimível 2400x3400 e centralizado
+    assert box == (0, 2, 2400, 3396)  # (x, y, largura, altura)
+    calls = fake_gdi["calls"]
+    assert calls[0] == ("CreatePrinterDC", "Financeiro")
+    assert calls.count(("StartPage",)) == calls.count(("EndPage",)) == 4
+    assert calls[-2:] == [("EndDoc",), ("DeleteDC",)]
+
+
+def test_vector_landscape_page_is_rotated(fake_gdi, sample_pdf):
+    fake_gdi["install_vector"]()
+    gdi.print_pdf_vector("P", sample_pdf(pages=1, size=(842, 595)), "paisagem.pdf")
+    (_hdc, (_x, _y, w, h), rotate, _flags) = fake_gdi["vector"][0]
+    assert rotate == 1 and h > w
+
+
+def test_vector_cancel_aborts_job(fake_gdi, sample_pdf):
+    fake_gdi["install_vector"]()
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(Cancelled):
+        gdi.print_pdf_vector("P", sample_pdf(pages=3), "x.pdf", cancel=cancel)
+    assert fake_gdi["calls"][-2:] == [("AbortDoc",), ("DeleteDC",)]
+
+
+def test_xfa_forms_fall_back_to_raster(fake_gdi, sample_pdf, monkeypatch):
+    fake_gdi["install_vector"]()
+    monkeypatch.setattr(pdf, "inspect", lambda path: (1, True))
+    print_entry(_entry(sample_pdf(pages=1), FileKind.PDF), PrintContext("P"))
+    assert fake_gdi["vector"] == [] and len(fake_gdi["draws"]) == 1
+
+
+def test_big_photo_is_shrunk_to_page_and_small_image_is_not(fake_gdi):
+    big = Image.new("RGB", (6000, 8000))
+    gdi.print_pages("P", "foto", lambda dpi: [big])
+    size, box = fake_gdi["draws"][0]
+    assert size == (box[2] - box[0], box[3] - box[1]) == (2400, 3200)
+    fake_gdi["draws"].clear()
+    gdi.print_pages("P", "logo", lambda dpi: [Image.new("RGB", (30, 40))])
+    assert fake_gdi["draws"][0][0] == (30, 40)
+
+
+def test_grayscale_images_stay_8bit(tmp_path):
+    gray = tmp_path / "scan.png"
+    Image.new("L", (10, 10), 128).save(gray)
+    assert next(images.image_pages(gray)).mode == "L"
+    bw = tmp_path / "fax.tif"
+    Image.new("1", (10, 10), 1).save(bw)
+    assert next(images.image_pages(bw)).mode == "L"
+    deep = tmp_path / "16bits.tif"
+    img16 = Image.new("I;16", (4, 1))
+    img16.putdata([0, 1000, 2000, 4000])
+    img16.save(deep)
+    page = next(images.image_pages(deep))
+    assert page.mode == "L" and page.getpixel((0, 0)) == 0 and page.getpixel((3, 0)) == 255
+    la = tmp_path / "la.png"
+    Image.new("LA", (4, 4), (0, 0)).save(la)
+    page = next(images.image_pages(la))
+    assert page.mode == "L" and page.getpixel((0, 0)) == 255
+
+
+def test_pdf_inspect_reports_pages_and_raster_need(sample_pdf):
+    assert pdf.inspect(sample_pdf(pages=2)) == (2, False)
+
+
+def _run_batch(paths, pdf_mode="vector"):
+    import queue
+
+    from printer_app.jobs import PrintJob
+
+    class NoOffice:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+    events: queue.Queue = queue.Queue()
+    job = PrintJob(
+        [(i, _entry(p, FileKind.PDF)) for i, p in enumerate(paths)],
+        "Rede",
+        1,
+        events,
+        session_factory=NoOffice,
+        pdf_mode=pdf_mode,
+    )
+    job.start()
+    job.join(10)
+    return job
+
+
+def test_batch_reuses_one_printer_dc(fake_gdi, sample_pdf):
+    """Lote com vários arquivos abre a impressora uma vez só (um trabalho por arquivo)."""
+    fake_gdi["install_vector"]()
+    paths = [sample_pdf(f"boleto{i}.pdf", pages=1) for i in range(3)]
+    job = _run_batch(paths)
+    calls = fake_gdi["calls"]
+    assert job.summary.done == 3
+    assert calls.count(("CreatePrinterDC", "Rede")) == 1
+    assert [c[1] for c in calls if c[0] == "StartDoc"] == [
+        "boleto0.pdf",
+        "boleto1.pdf",
+        "boleto2.pdf",
+    ]
+    assert calls.count(("EndDoc",)) == 3
+    assert calls[-1] == ("DeleteDC",) and calls.count(("DeleteDC",)) == 1
+
+
+def test_driver_error_discards_dc_and_next_file_gets_a_new_one(fake_gdi, sample_pdf):
+    import sys
+
+    from conftest import FakeDC
+
+    created = []
+
+    def create_dc():  # só o 1º DC tem driver com defeito
+        created.append(1)
+        return FakeDC(fake_gdi["calls"], fail_on_page=1 if len(created) == 1 else None)
+
+    sys.modules["win32ui"].CreateDC = create_dc
+    paths = [sample_pdf(f"f{i}.pdf", pages=1) for i in range(2)]
+    job = _run_batch(paths, pdf_mode="raster")
+    calls = fake_gdi["calls"]
+    assert (job.summary.errors, job.summary.done) == (1, 1)
+    assert calls.count(("CreatePrinterDC", "Rede")) == 2
+    assert calls.count(("AbortDoc",)) == 1 and calls.count(("EndDoc",)) == 1
+    assert calls.count(("DeleteDC",)) == 2
+
+
+def test_raster_mode_is_respected(fake_gdi, sample_pdf):
+    fake_gdi["install_vector"]()
+    ctx = PrintContext("P", pdf_mode="raster")
+    print_entry(_entry(sample_pdf(pages=2), FileKind.PDF), ctx)
+    assert fake_gdi["vector"] == [] and len(fake_gdi["draws"]) == 2

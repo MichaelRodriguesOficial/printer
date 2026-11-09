@@ -223,6 +223,18 @@ class App(_Base):
         self.copies_entry.grid(row=0, column=1, padx=6)
         self.copies_plus.grid(row=0, column=2)
         self.copies_entry.bind("<FocusOut>", lambda _e: self._normalize_copies())
+        self.fast_pdf_switch = ctk.CTkSwitch(
+            stepper, text="PDF rápido (vetorial)", font=theme.font(12),
+            command=self._on_pdf_mode, progress_color=theme.ACCENT,
+        )  # fmt: skip
+        if self.settings.pdf_mode == "vector":
+            self.fast_pdf_switch.select()
+        self.fast_pdf_switch.grid(row=1, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        theme.tooltip(
+            self.fast_pdf_switch,
+            "Envia o PDF como texto e vetores (como o Foxit): menos dados para a impressora.\n"
+            "Desligue se alguma impressora imprimir PDFs com defeito.",
+        )
 
         theme.section(bar, "ADICIONAR").grid(row=8, column=0, sticky="w", pady=(20, 6), **pad)
         self.add_files_button = ctk.CTkButton(
@@ -509,6 +521,9 @@ class App(_Base):
         self.copies_var.set(str(min(max(self.copies + delta, 1), MAX_COPIES)))
         self.settings.copies = self.copies
 
+    def _on_pdf_mode(self) -> None:
+        self.settings.pdf_mode = "vector" if self.fast_pdf_switch.get() else "raster"
+
     def _on_appearance(self, label: str) -> None:
         mode = next(k for k, v in APPEARANCE_LABELS.items() if v == label)
         self.settings.appearance = mode
@@ -690,6 +705,7 @@ class App(_Base):
             self._job_events,
             print_fn=self.backend.print_fn,
             session_factory=self.backend.session_factory,
+            pdf_mode=self.settings.pdf_mode,
         )
         self.progress.set(0)
         self._set_status(f"Enviando para {printer.name}…")
@@ -734,6 +750,7 @@ class App(_Base):
         self.progress.set(1 if summary and not summary.cancelled else self.progress.get())
         if summary is not None:
             parts = [f"{summary.done} impresso(s)"]
+            elapsed = f" em {_duration(summary.seconds)}" if summary.seconds >= 1 else ""
             if summary.pages:
                 parts[0] += f" • {summary.pages} página(s)"
             if summary.errors:
@@ -743,7 +760,7 @@ class App(_Base):
             if summary.cancelled:
                 parts.append(f"{summary.cancelled} cancelado(s)")
             color = theme.ERROR if summary.errors else theme.SUCCESS
-            self._set_status("Concluído: " + ", ".join(parts), color)
+            self._set_status(f"Concluído{elapsed}: " + ", ".join(parts), color)
             if summary.errors or summary.cancelled:
                 self.bell()
         self._refresh_ui_state()
@@ -786,6 +803,7 @@ class App(_Base):
             self.printer_menu,
             self.prefs_button,
             self.appearance,
+            self.fast_pdf_switch,
         ):
             widget.configure(state=idle)
         busy = printing or self._preparing > 0
@@ -838,6 +856,11 @@ class App(_Base):
         save_settings(self.settings, self.settings_file)
         shutil.rmtree(self.workdir, ignore_errors=True)
         self.destroy()
+
+
+def _duration(seconds: float) -> str:
+    minutes, secs = divmod(round(seconds), 60)
+    return f"{minutes} min {secs:02d} s" if minutes else f"{secs} s"
 
 
 def open_path(path: Path) -> None:

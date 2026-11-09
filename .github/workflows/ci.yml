@@ -55,7 +55,8 @@ jobs:
 
       - name: Instalar LibreOffice (alternativa ao Office)
         run: choco install libreoffice-fresh -y --no-progress
-        timeout-minutes: 15
+        timeout-minutes: 12
+        continue-on-error: true  # o mirror do Chocolatey às vezes trava; os testes pulam sem LO
 
       - name: Testes
         run: python -m pytest -v -rs
